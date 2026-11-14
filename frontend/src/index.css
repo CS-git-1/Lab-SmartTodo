@@ -1,0 +1,27 @@
+:root {
+    font-family: "Sarabun", Tahoma, sans-serif;
+    color: #17324d;
+    background: #eef8ff;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    padding: 64px 20px;
+    background: radial-gradient(ellipse at 12% 0%, #ccecff 0, transparent 38%), radial-gradient(ellipse at 92% 10%, #dff6f5 0, transparent 32%), #eef8ff;
+}
+
+input, select, button { font: inherit; }
+
+.app h1 { font-family: "Noto Sans Thai", Tahoma, sans-serif; }
+
+@media (max-width: 560px) {
+    body { padding: 36px 15px; }
+}

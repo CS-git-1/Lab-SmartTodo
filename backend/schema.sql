@@ -1,113 +1,133 @@
-/* Smart Todo database schema for Microsoft SQL Server.
-   Run this script in SSMS or with sqlcmd. */
+/* Smart Todo schema. Execute while connected to the target Azure SQL database. */
 
-IF DB_ID(N'SmartTodo') IS NULL
-    CREATE DATABASE SmartTodo;
-GO
-
-USE SmartTodo;
-GO
-
-/* App users. Keep password hashes only; never store plaintext passwords. */
 IF OBJECT_ID(N'dbo.Users', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.Users (
-        UserId          BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Users PRIMARY KEY,
-        Email           NVARCHAR(320) NOT NULL,
-        DisplayName     NVARCHAR(120) NOT NULL,
-        PasswordHash    NVARCHAR(512) NOT NULL,
-        CreatedAt       DATETIME2(0) NOT NULL CONSTRAINT DF_Users_CreatedAt DEFAULT SYSUTCDATETIME(),
-        UpdatedAt       DATETIME2(0) NOT NULL CONSTRAINT DF_Users_UpdatedAt DEFAULT SYSUTCDATETIME(),
-        IsActive        BIT NOT NULL CONSTRAINT DF_Users_IsActive DEFAULT (1),
-        CONSTRAINT UQ_Users_Email UNIQUE (Email)
-    );
-END;
+CREATE TABLE dbo.Users (
+    UserId uniqueidentifier NOT NULL CONSTRAINT DF_Users_Id DEFAULT NEWSEQUENTIALID(),
+    Email nvarchar(254) NOT NULL,
+    DisplayName nvarchar(100) NOT NULL,
+    PasswordHash nvarchar(512) NOT NULL,
+    CreatedAt datetime2(3) NOT NULL CONSTRAINT DF_Users_Created DEFAULT SYSUTCDATETIME(),
+    UpdatedAt datetime2(3) NOT NULL CONSTRAINT DF_Users_Updated DEFAULT SYSUTCDATETIME(),
+    Version rowversion NOT NULL,
+    CONSTRAINT PK_Users PRIMARY KEY (UserId),
+    CONSTRAINT UQ_Users_Email UNIQUE (Email),
+    CONSTRAINT CK_Users_Email CHECK (LEN(LTRIM(RTRIM(Email))) > 0),
+    CONSTRAINT CK_Users_Name CHECK (LEN(LTRIM(RTRIM(DisplayName))) > 0)
+);
 GO
 
-/* Todo lists owned by a user. */
-IF OBJECT_ID(N'dbo.TodoLists', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.TodoLists (
-        TodoListId      BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_TodoLists PRIMARY KEY,
-        UserId          BIGINT NOT NULL,
-        Name            NVARCHAR(120) NOT NULL,
-        Description     NVARCHAR(500) NULL,
-        SortOrder       INT NOT NULL CONSTRAINT DF_TodoLists_SortOrder DEFAULT (0),
-        CreatedAt       DATETIME2(0) NOT NULL CONSTRAINT DF_TodoLists_CreatedAt DEFAULT SYSUTCDATETIME(),
-        UpdatedAt       DATETIME2(0) NOT NULL CONSTRAINT DF_TodoLists_UpdatedAt DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT FK_TodoLists_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId) ON DELETE CASCADE
-    );
-    CREATE INDEX IX_TodoLists_UserId_SortOrder ON dbo.TodoLists(UserId, SortOrder);
-END;
+IF OBJECT_ID(N'dbo.Projects', N'U') IS NULL
+CREATE TABLE dbo.Projects (
+    ProjectId uniqueidentifier NOT NULL CONSTRAINT DF_Projects_Id DEFAULT NEWSEQUENTIALID(),
+    UserId uniqueidentifier NOT NULL,
+    Name nvarchar(150) NOT NULL,
+    Description nvarchar(2000) NULL,
+    IsArchived bit NOT NULL CONSTRAINT DF_Projects_Archived DEFAULT 0,
+    CreatedAt datetime2(3) NOT NULL CONSTRAINT DF_Projects_Created DEFAULT SYSUTCDATETIME(),
+    UpdatedAt datetime2(3) NOT NULL CONSTRAINT DF_Projects_Updated DEFAULT SYSUTCDATETIME(),
+    Version rowversion NOT NULL,
+    CONSTRAINT PK_Projects PRIMARY KEY (ProjectId),
+    CONSTRAINT UQ_Projects_Owner UNIQUE (UserId, ProjectId),
+    CONSTRAINT FK_Projects_User FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId),
+    CONSTRAINT CK_Projects_Name CHECK (LEN(LTRIM(RTRIM(Name))) > 0)
+);
 GO
 
-/* Tasks support due dates, priority, completion, and optional list grouping. */
-IF OBJECT_ID(N'dbo.Todos', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.Todos (
-        TodoId          BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Todos PRIMARY KEY,
-        UserId          BIGINT NOT NULL,
-        TodoListId      BIGINT NULL,
-        Title           NVARCHAR(200) NOT NULL,
-        Description     NVARCHAR(MAX) NULL,
-        Status          VARCHAR(20) NOT NULL CONSTRAINT DF_Todos_Status DEFAULT ('pending'),
-        Priority        TINYINT NOT NULL CONSTRAINT DF_Todos_Priority DEFAULT (2),
-        DueAt           DATETIME2(0) NULL,
-        CompletedAt     DATETIME2(0) NULL,
-        SortOrder       INT NOT NULL CONSTRAINT DF_Todos_SortOrder DEFAULT (0),
-        CreatedAt       DATETIME2(0) NOT NULL CONSTRAINT DF_Todos_CreatedAt DEFAULT SYSUTCDATETIME(),
-        UpdatedAt       DATETIME2(0) NOT NULL CONSTRAINT DF_Todos_UpdatedAt DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT FK_Todos_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId) ON DELETE CASCADE,
-        CONSTRAINT FK_Todos_TodoLists FOREIGN KEY (TodoListId) REFERENCES dbo.TodoLists(TodoListId) ON DELETE SET NULL,
-        CONSTRAINT CK_Todos_Status CHECK (Status IN ('pending', 'in_progress', 'completed', 'cancelled')),
-        CONSTRAINT CK_Todos_Priority CHECK (Priority BETWEEN 1 AND 3)
-    );
-    CREATE INDEX IX_Todos_UserId_Status_DueAt ON dbo.Todos(UserId, Status, DueAt);
-    CREATE INDEX IX_Todos_TodoListId_SortOrder ON dbo.Todos(TodoListId, SortOrder);
-END;
+IF OBJECT_ID(N'dbo.Tasks', N'U') IS NULL
+CREATE TABLE dbo.Tasks (
+    TaskId uniqueidentifier NOT NULL CONSTRAINT DF_Tasks_Id DEFAULT NEWSEQUENTIALID(),
+    UserId uniqueidentifier NOT NULL,
+    ProjectId uniqueidentifier NULL,
+    Title nvarchar(300) NOT NULL,
+    Description nvarchar(max) NULL,
+    Status varchar(20) NOT NULL CONSTRAINT DF_Tasks_Status DEFAULT 'todo',
+    Priority tinyint NOT NULL CONSTRAINT DF_Tasks_Priority DEFAULT 2,
+    StartAt datetime2(3) NULL,
+    DueAt datetime2(3) NULL,
+    EstimatedMinutes int NULL,
+    CompletedAt datetime2(3) NULL,
+    SortOrder int NOT NULL CONSTRAINT DF_Tasks_SortOrder DEFAULT 0,
+    CreatedAt datetime2(3) NOT NULL CONSTRAINT DF_Tasks_Created DEFAULT SYSUTCDATETIME(),
+    UpdatedAt datetime2(3) NOT NULL CONSTRAINT DF_Tasks_Updated DEFAULT SYSUTCDATETIME(),
+    Version rowversion NOT NULL,
+    CONSTRAINT PK_Tasks PRIMARY KEY (TaskId),
+    CONSTRAINT UQ_Tasks_Owner UNIQUE (UserId, TaskId),
+    CONSTRAINT FK_Tasks_User FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId),
+    CONSTRAINT FK_Tasks_Project FOREIGN KEY (UserId, ProjectId) REFERENCES dbo.Projects(UserId, ProjectId),
+    CONSTRAINT CK_Tasks_Title CHECK (LEN(LTRIM(RTRIM(Title))) > 0),
+    CONSTRAINT CK_Tasks_Status CHECK (Status IN ('todo', 'in_progress', 'done', 'cancelled')),
+    CONSTRAINT CK_Tasks_Priority CHECK (Priority BETWEEN 1 AND 4),
+    CONSTRAINT CK_Tasks_Dates CHECK (StartAt IS NULL OR DueAt IS NULL OR DueAt >= StartAt),
+    CONSTRAINT CK_Tasks_Estimate CHECK (EstimatedMinutes IS NULL OR EstimatedMinutes > 0),
+    CONSTRAINT CK_Tasks_Completed CHECK ((Status = 'done' AND CompletedAt IS NOT NULL) OR (Status <> 'done' AND CompletedAt IS NULL))
+);
 GO
 
-/* Optional labels; a todo can have multiple labels. */
+IF OBJECT_ID(N'dbo.ChecklistItems', N'U') IS NULL
+CREATE TABLE dbo.ChecklistItems (
+    ChecklistItemId uniqueidentifier NOT NULL CONSTRAINT DF_Checklist_Id DEFAULT NEWSEQUENTIALID(),
+    TaskId uniqueidentifier NOT NULL,
+    Title nvarchar(300) NOT NULL,
+    IsCompleted bit NOT NULL CONSTRAINT DF_Checklist_Completed DEFAULT 0,
+    SortOrder int NOT NULL CONSTRAINT DF_Checklist_Order DEFAULT 0,
+    CreatedAt datetime2(3) NOT NULL CONSTRAINT DF_Checklist_Created DEFAULT SYSUTCDATETIME(),
+    UpdatedAt datetime2(3) NOT NULL CONSTRAINT DF_Checklist_Updated DEFAULT SYSUTCDATETIME(),
+    Version rowversion NOT NULL,
+    CONSTRAINT PK_ChecklistItems PRIMARY KEY (ChecklistItemId),
+    CONSTRAINT FK_Checklist_Task FOREIGN KEY (TaskId) REFERENCES dbo.Tasks(TaskId),
+    CONSTRAINT CK_Checklist_Title CHECK (LEN(LTRIM(RTRIM(Title))) > 0)
+);
+GO
+
 IF OBJECT_ID(N'dbo.Tags', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.Tags (
-        TagId           BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Tags PRIMARY KEY,
-        UserId          BIGINT NOT NULL,
-        Name            NVARCHAR(50) NOT NULL,
-        Color           CHAR(7) NULL,
-        CreatedAt       DATETIME2(0) NOT NULL CONSTRAINT DF_Tags_CreatedAt DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT FK_Tags_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId) ON DELETE CASCADE,
-        CONSTRAINT UQ_Tags_UserId_Name UNIQUE (UserId, Name)
-    );
-END;
+CREATE TABLE dbo.Tags (
+    TagId uniqueidentifier NOT NULL CONSTRAINT DF_Tags_Id DEFAULT NEWSEQUENTIALID(),
+    UserId uniqueidentifier NOT NULL,
+    Name nvarchar(50) NOT NULL,
+    CONSTRAINT PK_Tags PRIMARY KEY (TagId),
+    CONSTRAINT UQ_Tags_Owner UNIQUE (UserId, TagId),
+    CONSTRAINT UQ_Tags_Name UNIQUE (UserId, Name),
+    CONSTRAINT FK_Tags_User FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId),
+    CONSTRAINT CK_Tags_Name CHECK (LEN(LTRIM(RTRIM(Name))) > 0)
+);
 GO
 
-IF OBJECT_ID(N'dbo.TodoTags', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.TodoTags (
-        TodoId          BIGINT NOT NULL,
-        TagId           BIGINT NOT NULL,
-        CONSTRAINT PK_TodoTags PRIMARY KEY (TodoId, TagId),
-        CONSTRAINT FK_TodoTags_Todos FOREIGN KEY (TodoId) REFERENCES dbo.Todos(TodoId) ON DELETE CASCADE,
-        CONSTRAINT FK_TodoTags_Tags FOREIGN KEY (TagId) REFERENCES dbo.Tags(TagId) ON DELETE CASCADE
-    );
-    CREATE INDEX IX_TodoTags_TagId ON dbo.TodoTags(TagId);
-END;
+IF OBJECT_ID(N'dbo.TaskTags', N'U') IS NULL
+CREATE TABLE dbo.TaskTags (
+    UserId uniqueidentifier NOT NULL,
+    TaskId uniqueidentifier NOT NULL,
+    TagId uniqueidentifier NOT NULL,
+    CONSTRAINT PK_TaskTags PRIMARY KEY (UserId, TaskId, TagId),
+    CONSTRAINT FK_TaskTags_Task FOREIGN KEY (UserId, TaskId) REFERENCES dbo.Tasks(UserId, TaskId),
+    CONSTRAINT FK_TaskTags_Tag FOREIGN KEY (UserId, TagId) REFERENCES dbo.Tags(UserId, TagId)
+);
 GO
 
-/* Checklist items belonging to a task. */
-IF OBJECT_ID(N'dbo.TodoSubtasks', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.TodoSubtasks (
-        TodoSubtaskId   BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_TodoSubtasks PRIMARY KEY,
-        TodoId          BIGINT NOT NULL,
-        Title           NVARCHAR(200) NOT NULL,
-        IsCompleted     BIT NOT NULL CONSTRAINT DF_TodoSubtasks_IsCompleted DEFAULT (0),
-        SortOrder       INT NOT NULL CONSTRAINT DF_TodoSubtasks_SortOrder DEFAULT (0),
-        CreatedAt       DATETIME2(0) NOT NULL CONSTRAINT DF_TodoSubtasks_CreatedAt DEFAULT SYSUTCDATETIME(),
-        CompletedAt     DATETIME2(0) NULL,
-        CONSTRAINT FK_TodoSubtasks_Todos FOREIGN KEY (TodoId) REFERENCES dbo.Todos(TodoId) ON DELETE CASCADE
-    );
-    CREATE INDEX IX_TodoSubtasks_TodoId_SortOrder ON dbo.TodoSubtasks(TodoId, SortOrder);
-END;
+IF OBJECT_ID(N'dbo.Reminders', N'U') IS NULL
+CREATE TABLE dbo.Reminders (
+    ReminderId uniqueidentifier NOT NULL CONSTRAINT DF_Reminders_Id DEFAULT NEWSEQUENTIALID(),
+    TaskId uniqueidentifier NOT NULL,
+    RemindAt datetime2(3) NOT NULL,
+    Status varchar(20) NOT NULL CONSTRAINT DF_Reminders_Status DEFAULT 'pending',
+    SentAt datetime2(3) NULL,
+    CreatedAt datetime2(3) NOT NULL CONSTRAINT DF_Reminders_Created DEFAULT SYSUTCDATETIME(),
+    Version rowversion NOT NULL,
+    CONSTRAINT PK_Reminders PRIMARY KEY (ReminderId),
+    CONSTRAINT FK_Reminders_Task FOREIGN KEY (TaskId) REFERENCES dbo.Tasks(TaskId),
+    CONSTRAINT CK_Reminders_Status CHECK (Status IN ('pending', 'sent', 'cancelled')),
+    CONSTRAINT CK_Reminders_Sent CHECK ((Status = 'sent' AND SentAt IS NOT NULL) OR (Status <> 'sent' AND SentAt IS NULL))
+);
 GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Tasks_User_Status_Due' AND object_id = OBJECT_ID(N'dbo.Tasks'))
+    CREATE INDEX IX_Tasks_User_Status_Due ON dbo.Tasks(UserId, Status, DueAt) INCLUDE (Priority, Title, ProjectId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Tasks_Project' AND object_id = OBJECT_ID(N'dbo.Tasks'))
+    CREATE INDEX IX_Tasks_Project ON dbo.Tasks(UserId, ProjectId, SortOrder);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Checklist_Task' AND object_id = OBJECT_ID(N'dbo.ChecklistItems'))
+    CREATE INDEX IX_Checklist_Task ON dbo.ChecklistItems(TaskId, SortOrder);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_TaskTags_Tag' AND object_id = OBJECT_ID(N'dbo.TaskTags'))
+    CREATE INDEX IX_TaskTags_Tag ON dbo.TaskTags(UserId, TagId, TaskId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Reminders_Pending' AND object_id = OBJECT_ID(N'dbo.Reminders'))
+    CREATE INDEX IX_Reminders_Pending ON dbo.Reminders(RemindAt) INCLUDE (TaskId) WHERE Status = 'pending';
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Reminders_Task' AND object_id = OBJECT_ID(N'dbo.Reminders'))
+    CREATE INDEX IX_Reminders_Task ON dbo.Reminders(TaskId);

@@ -1,0 +1,539 @@
+{
+  "info": {
+    "_postman_id": "c67dc7a3-1db7-46d7-99e1-818160365a39",
+    "name": "Smart Todo API - Azure SQL Server",
+    "description": "Set baseUrl, email, and password. Register creates an account and should be run once with a new email. Login stores the HttpOnly session cookie in Postman cookie jar; CRUD requests use that session.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"displayName\": \"{{displayName}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/auth/register"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('registers account', () => pm.response.to.have.status(201));",
+                  "pm.test('sets an HttpOnly session cookie', () => pm.expect(pm.response.headers.get('Set-Cookie')).to.include('HttpOnly'));",
+                  "pm.test('returns user without exposing token', () => pm.expect(pm.response.json().data.user).to.be.an('object')); "
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login and save session cookie",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login succeeds', () => pm.response.to.have.status(200));",
+                  "pm.test('sets an HttpOnly session cookie', () => pm.expect(pm.response.headers.get('Set-Cookie')).to.include('HttpOnly'));",
+                  "pm.test('returns the signed-in user without exposing the token', () => pm.expect(pm.response.json().data.user).to.be.an('object')); "
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get current user",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns current user', () => pm.response.to.have.status(200));",
+                  "pm.test('returns user identity', () => pm.expect(pm.response.json().data).to.have.property('id')); "
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Health and Database",
+      "item": [
+        {
+          "name": "API root",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns API message', () => pm.expect(pm.response.json().message).to.eql('Smart Todo API is running')); "
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                  "pm.test('reports success', () => pm.expect(pm.response.json().success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API health compatibility route",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                  "pm.test('reports status ok', () => pm.expect(pm.response.json().status).to.eql('ok')); "
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tasks CRUD (run in order)",
+      "description": "Run Register once with a new email, or skip it and provide an existing account for Login. Postman stores the HttpOnly session cookie automatically. Run CRUD requests in order: POST saves taskId for PUT and DELETE; Logout is last.",
+      "item": [
+        {
+          "name": "Create task validation (blank title)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"   \"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/tasks"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejects invalid task data', () => pm.response.to.have.status(400));",
+                  "pm.test('returns a validation error code', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create task - save taskId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"  Postman test task  \"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/tasks"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('creates task', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns a task ID', () => pm.expect(body.data.id).to.be.a('string'));",
+                  "pm.collectionVariables.set('taskId', body.data.id);",
+                  "pm.test('trims title before saving', () => pm.expect(body.data.title).to.eql('Postman test task'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Tasks (GET /api/tasks) - Filters and pagination",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/tasks?page=1&limit=10&status=todo&priority=2&q=Postman",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('lists tasks', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns data array', () => pm.expect(body.data).to.be.an('array'));",
+                  "if (body.data.length > 0) pm.test('includes pagination metadata', () => pm.expect(body.pagination).to.have.property('total'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject page above maximum",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/tasks?page=10001&limit=100"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejects page above 10000', () => pm.response.to.have.status(400));",
+                  "pm.test('returns validation error', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR')); "
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Tasks (GET /api/tasks) - Empty result",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/tasks?q=__no_matching_task__"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 200 for an empty result', () => pm.response.to.have.status(200));",
+                  "pm.test('matches empty contract', () => pm.expect(pm.response.json()).to.eql({ data: [] }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get task by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/tasks/{{taskId}}",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('gets task', () => pm.response.to.have.status(200));",
+                  "pm.test('returns the created task', () => pm.expect(pm.response.json().data.id).to.eql(pm.collectionVariables.get('taskId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update task",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated by Postman\",\n  \"status\": \"in_progress\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/tasks/{{taskId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('updates task', () => pm.response.to.have.status(200));",
+                  "pm.test('returns updated values', () => { const body = pm.response.json(); pm.expect(body.data.title).to.eql('Updated by Postman'); pm.expect(body.data.status).to.eql('in_progress'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replace task (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Replaced task title\",\n  \"isCompleted\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/tasks/{{taskId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('replaces task', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns trimmed replacement and completed state', () => { pm.expect(body.data.title).to.eql('Replaced task title'); pm.expect(body.data.isCompleted).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replace missing task (404)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Missing task\",\n  \"isCompleted\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/tasks/00000000-0000-4000-8000-000000000001"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 404 for missing task', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete task and child data",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/tasks/{{taskId}}",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('deletes task without a response body', () => { pm.response.to.have.status(204); pm.expect(pm.response.text()).to.eql(''); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete missing task (404)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/tasks/00000000-0000-4000-8000-000000000001"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns 404 for missing task', () => pm.response.to.have.status(404));",
+                  "pm.test('uses standard error envelope', () => pm.expect(pm.response.json().error.code).to.eql('TASK_NOT_FOUND'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Legacy API alias list",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/tasks?page=1&limit=10",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('legacy alias is available', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout and clear session cookie",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/logout"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logs out', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "taskId",
+      "value": ""
+    },
+    {
+      "key": "email",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "displayName",
+      "value": "Postman User"
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('response exposes an HTTP status and duration', () => { pm.expect(pm.response.code).to.be.a('number'); pm.expect(pm.response.responseTime).to.be.a('number'); });",
+          "console.log(`HTTP ${pm.response.code} in ${pm.response.responseTime} ms`);"
+        ]
+      }
+    }
+  ]
+}
