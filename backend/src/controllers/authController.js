@@ -1,4 +1,4 @@
-import { getTokenLifetimeSeconds, loginUser, registerUser } from '../services/authService.js';
+import { getTokenLifetimeSeconds, loginUser, registerUser, requestPasswordReset, resetPassword } from '../services/authService.js';
 import { logServerError, sendApiError } from '../utils/apiError.js';
 
 const authCookieName = 'smart-todo.session';
@@ -47,4 +47,41 @@ export async function me(req, res) {
 export async function logout(_req, res) {
     res.clearCookie(authCookieName, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
     return res.status(204).end();
+}
+
+export async function forgotPassword(req, res) {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+        return validationError(res, 'Please enter a valid email address');
+    }
+    try {
+        await requestPasswordReset(email);
+        return res.status(202).json({
+            success: true,
+            message: 'If an account exists for that email, password reset instructions will be sent.',
+        });
+    } catch (error) {
+        logServerError('Password reset request failed', error);
+        if (error.code === 'PASSWORD_RESET_EMAIL_NOT_CONFIGURED') {
+            return sendApiError(res, 503, 'PASSWORD_RESET_UNAVAILABLE', 'Password reset email is not configured');
+        }
+        return sendApiError(res, 500, 'INTERNAL_SERVER_ERROR', 'Unable to process password reset request');
+    }
+}
+
+export async function completePasswordReset(req, res) {
+    const { token, password } = req.body ?? {};
+    if (typeof token !== 'string' || !/^[a-f0-9]{64}$/i.test(token)) {
+        return validationError(res, 'Password reset link is invalid or expired');
+    }
+    if (typeof password !== 'string' || password.length < 10 || password.length > 200) {
+        return validationError(res, 'Password must be 10–200 characters');
+    }
+    try {
+        const updated = await resetPassword({ token, password });
+        if (!updated) return sendApiError(res, 400, 'INVALID_RESET_TOKEN', 'Password reset link is invalid or expired');
+        return res.json({ success: true, message: 'Password has been reset' });
+    } catch (error) {
+        return databaseError(res, error);
+    }
 }

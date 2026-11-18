@@ -28,8 +28,6 @@ app.use((req, _res, next) => {
 });
 app.use(express.json({ limit: '16kb' }));
 app.use('/api/auth', authRoutes);
-app.use('/auth', authRoutes);
-app.use('/tasks', authenticate, taskRoutes);
 app.use('/api/tasks', authenticate, taskRoutes);
 
 app.get('/health', (_req, res) => {

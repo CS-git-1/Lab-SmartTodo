@@ -19,6 +19,7 @@ function createPool() {
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
         connectionTimeout: Number(process.env.DB_LOGIN_TIMEOUT || 30) * 1000,
+        requestTimeout: Number(process.env.DB_REQUEST_TIMEOUT || 30) * 1000,
         options: {
             encrypt: process.env.DB_ENCRYPT !== 'false',
             trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === 'true',

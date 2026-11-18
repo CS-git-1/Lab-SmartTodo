@@ -10,10 +10,10 @@ const maxDescriptionLength = 2000;
 const maxEstimatedMinutes = 525600;
 const minSortOrder = -1000000;
 const maxSortOrder = 1000000;
-const maxTitleLength = 100;
+const maxTitleLength = 300;
 const maxPage = 10000;
 
-const titleMessage = 'กรุณาระบุชื่องาน 1–100 ตัวอักษร';
+const titleMessage = 'กรุณาระบุชื่องาน 1–300 ตัวอักษร';
 const listQueryFields = new Set(['page', 'limit', 'status', 'priority', 'projectId', 'q']);
 
 function isValidIsoDateTime(value) {
@@ -77,16 +77,15 @@ export async function list(req, res) {
     if (req.query.projectId !== undefined && (typeof req.query.projectId !== 'string' || !uuidPattern.test(req.query.projectId))) return validationError(res, 'รหัสโครงการไม่ถูกต้อง');
     try {
         const result = await listTasks({ userId, status: req.query.status, priority: req.query.priority ? Number(req.query.priority) : undefined, projectId: req.query.projectId, q: req.query.q, page, limit });
-        if (result.data.length === 0) return res.json({ data: [] });
         res.json({ data: result.data, pagination: { page, limit, total: result.total, pages: Math.ceil(result.total / limit) } });
-    } catch (error) { databaseError(res, error); }
+    } catch (error) { return databaseError(res, error); }
 }
 
 export async function read(req, res) {
     const userId = req.auth.userId;
     if (!uuidPattern.test(req.params.taskId)) return validationError(res, 'รหัสงานไม่ถูกต้อง');
     try { const task = await getTask(userId, req.params.taskId); return task ? res.json({ success: true, data: task }) : sendApiError(res, 404, 'TASK_NOT_FOUND', 'ไม่พบงานที่ต้องการ'); }
-    catch (error) { databaseError(res, error); }
+    catch (error) { return databaseError(res, error); }
 }
 
 export async function create(req, res) {
@@ -155,7 +154,7 @@ export async function replace(req, res) {
     try {
         const task = await updateTask(userId, req.params.taskId, changes);
         return task ? res.json({ success: true, data: task }) : sendApiError(res, 404, 'TASK_NOT_FOUND', 'ไม่พบงานที่ต้องการ');
-    } catch (error) { databaseError(res, error); }
+    } catch (error) { return databaseError(res, error); }
 }
 
 export async function remove(req, res) {

@@ -8,8 +8,8 @@ import { getCurrentUser, logout } from "./api/authApi.js";
 import { createTask, deleteTask, listTasks, replaceTask } from "./api/taskApi.js";
 import "./App.css";
 
-const priorityLabels = { low: "ความสำคัญน้อย", medium: "ความสำคัญปานกลาง", high: "ความสำคัญมาก" };
-const allowedPriorities = ["low", "medium", "high"];
+const priorityLabels = { low: "ความสำคัญน้อย", medium: "ความสำคัญปานกลาง", high: "ความสำคัญมาก", urgent: "เร่งด่วน" };
+const allowedPriorities = ["low", "medium", "high", "urgent"];
 
 function isValidDateString(value) {
     if (value === null || value === "") return true;
@@ -19,7 +19,7 @@ function isValidDateString(value) {
 }
 
 export default function App() {
-    const [isAuthenticated, setIsAuthenticated] = useState(true);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [user, setUser] = useState(null);
     const [todos, setTodos] = useState([]);
     const [pendingTaskIds, setPendingTaskIds] = useState(() => new Set());
@@ -41,22 +41,28 @@ export default function App() {
         if (!isAuthenticated) return undefined;
 
         const controller = new AbortController();
-        Promise.all([
-            getCurrentUser(),
-            listTasks({}, { signal: controller.signal }),
-        ]).then(([currentUser, tasks]) => {
-            setUser(currentUser);
-            setTodos(tasks);
-            setLoadError("");
-            setMessage("");
-            setMessageType("");
-        }).catch((error) => {
-            if (error.name === "AbortError") return;
-            setLoadError(error.message || "โหลดรายการไม่สำเร็จ");
-            if (error.status === 401) signOut();
-        }).finally(() => {
-            if (!controller.signal.aborted) setIsLoading(false);
-        });
+
+        // FIX #4: แยก getCurrentUser กับ listTasks ออกจากกัน
+        // เพื่อให้ setUser ถูกเรียกได้แม้ listTasks จะ fail
+        getCurrentUser()
+            .then((currentUser) => {
+                setUser(currentUser);
+                return listTasks({}, { signal: controller.signal });
+            })
+            .then((tasks) => {
+                setTodos(tasks);
+                setLoadError("");
+                setMessage("");
+                setMessageType("");
+            })
+            .catch((error) => {
+                if (error.name === "AbortError") return;
+                setLoadError(error.message || "โหลดรายการไม่สำเร็จ");
+                if (error.status === 401) signOut();
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) setIsLoading(false);
+            });
 
         return () => controller.abort();
     }, [isAuthenticated, loadAttempt]);
@@ -124,16 +130,17 @@ export default function App() {
 
     async function handleAddTodo({ title, description, priority, dueDate }) {
         const cleanTitle = typeof title === "string" ? title.trim() : "";
-        if (!cleanTitle || cleanTitle.length > 100 || !allowedPriorities.includes(priority)
+        // FIX #7: title max 300 ตรงกับ backend
+        if (!cleanTitle || cleanTitle.length > 300 || !allowedPriorities.includes(priority)
             || typeof description !== "string" || !isValidDateString(dueDate)) {
             showMessage("ตรวจสอบชื่อ รายละเอียด ระดับความสำคัญ และวันกำหนดส่ง", true);
             return { ok: false };
         }
         showPendingMessage("กำลังบันทึกงาน...");
         try {
-            const todo = await createTask( { title: cleanTitle, description: description.trim(), priority, dueDate: dueDate || null });
+            const todo = await createTask({ title: cleanTitle, description: description.trim(), priority, dueDate: dueDate || null });
             setTodos((items) => [...items, todo]);
-            showMessage(`เพิ่มงาน “${cleanTitle}” แล้ว`);
+            showMessage(`เพิ่มงาน "${cleanTitle}" แล้ว`);
             return { ok: true };
         } catch (error) {
             showMessage(actionErrorMessage(error, "เพิ่มงาน", "เพิ่มงานไม่สำเร็จ"), true);
@@ -146,7 +153,7 @@ export default function App() {
         if (!current || !beginTaskRequest(id)) return;
         showPendingMessage("กำลังบันทึกสถานะงาน...");
         try {
-            const saved = await replaceTask( id, { ...current, completed: !current.completed });
+            const saved = await replaceTask(id, { ...current, completed: !current.completed });
             setTodos((items) => items.map((todo) => todo.id === id ? saved : todo));
             showMessage("อัปเดตสถานะงานแล้ว");
         } catch (error) { showMessage(actionErrorMessage(error, "เปลี่ยนสถานะ", "อัปเดตสถานะไม่สำเร็จ"), true); }
@@ -157,7 +164,7 @@ export default function App() {
         if (!beginTaskRequest(id)) return;
         showPendingMessage("กำลังลบงาน...");
         try {
-            await deleteTask( id);
+            await deleteTask(id);
             setTodos((items) => items.filter((todo) => todo.id !== id));
             showMessage("ลบงานแล้ว");
         } catch (error) { showMessage(actionErrorMessage(error, "ลบงาน", "ลบงานไม่สำเร็จ"), true); }
@@ -167,7 +174,8 @@ export default function App() {
     async function handleEdit(id, changes) {
         const current = todos.find((todo) => todo.id === id);
         const cleanTitle = typeof changes.title === "string" ? changes.title.trim() : "";
-        if (!current || !cleanTitle || cleanTitle.length > 100 || typeof changes.description !== "string"
+        // FIX #7: title max 300 ตรงกับ backend
+        if (!current || !cleanTitle || cleanTitle.length > 300 || typeof changes.description !== "string"
             || changes.description.length > 2000 || !allowedPriorities.includes(changes.priority)
             || !isValidDateString(changes.dueDate)) {
             showMessage("ข้อมูล task ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง", true);
@@ -176,7 +184,7 @@ export default function App() {
         if (!beginTaskRequest(id)) return { ok: false };
         showPendingMessage("กำลังบันทึกการแก้ไข...");
         try {
-            const saved = await replaceTask( id, {
+            const saved = await replaceTask(id, {
                 ...changes,
                 title: cleanTitle,
                 dueDate: changes.dueDate || null,
@@ -222,7 +230,8 @@ export default function App() {
 
     const query = searchKeyword.trim().toLocaleLowerCase();
     const filteredTodos = todos.filter((todo) => {
-        const matchesSearch = !query || [todo.title, todo.description].some((value) => value.toLocaleLowerCase().includes(query));
+        // FIX #3 (null guard): ใช้ optional chaining กัน crash ถ้า description เป็น null
+        const matchesSearch = !query || [todo.title, todo.description].some((value) => value?.toLocaleLowerCase().includes(query));
         const matchesStatus = statusFilter === "all"
             || (statusFilter === "active" && !todo.completed)
             || (statusFilter === "completed" && todo.completed);
@@ -256,7 +265,7 @@ export default function App() {
                 <p className={`form-message${messageType ? ` ${messageType}` : ""}`}
                     role={isError ? "alert" : "status"} aria-live={isError ? "assertive" : "polite"}>{message}</p>
                 <div className="section-head">
-                    <h2>งานของฉัน</h2>
+                    {/* FIX #2: ลบ h2 ซ้ำออก เหลือแค่ count */}
                     <span className="count">{filteredTodos.length} รายการที่ตรงเงื่อนไข</span>
                 </div>
                 <TodoFilter currentStatus={statusFilter} currentPriority={priorityFilter} counts={counts}

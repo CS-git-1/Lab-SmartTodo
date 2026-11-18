@@ -1,6 +1,7 @@
-import { randomBytes, scrypt as scryptCallback, timingSafeEqual, createHmac } from 'node:crypto';
+import { randomBytes, scrypt as scryptCallback, timingSafeEqual, createHmac, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import { createUser, findUserByEmail } from '../repositories/authRepository.js';
+import nodemailer from 'nodemailer';
+import { createUser, findUserByEmail, createPasswordResetToken, deletePasswordResetToken, hasValidPasswordResetToken, consumePasswordResetToken } from '../repositories/authRepository.js';
 
 const scrypt = promisify(scryptCallback);
 const tokenTtlSeconds = 60 * 60 * 8;
@@ -71,4 +72,53 @@ export async function loginUser({ email, password }) {
     if (!user || !(await passwordMatches(password, user.passwordHash))) return null;
     const { passwordHash: _passwordHash, ...safeUser } = user;
     return { user: safeUser, token: createToken(safeUser) };
+}
+
+function hashResetToken(token) {
+    return createHash('sha256').update(token).digest('hex');
+}
+
+function createResetMailer() {
+    const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM } = process.env;
+    if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASSWORD || !SMTP_FROM) {
+        const error = new Error('Password reset email is not configured');
+        error.code = 'PASSWORD_RESET_EMAIL_NOT_CONFIGURED';
+        throw error;
+    }
+    return nodemailer.createTransport({
+        host: SMTP_HOST,
+        port: Number(SMTP_PORT),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: { user: SMTP_USER, pass: SMTP_PASSWORD },
+    });
+}
+
+export async function requestPasswordReset(email) {
+    const mailer = createResetMailer();
+    const user = await findUserByEmail(email);
+    if (!user) return;
+
+    const token = randomBytes(32).toString('hex');
+    const tokenHash = hashResetToken(token);
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    await createPasswordResetToken({ userId: user.id, tokenHash, expiresAt });
+    const baseUrl = (process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:5173').replace(/\/+$/, '');
+    const resetUrl = new URL('/', `${baseUrl}/`);
+    resetUrl.searchParams.set('resetToken', token);
+    void mailer.sendMail({
+            from: process.env.SMTP_FROM,
+            to: user.email,
+            subject: 'Reset your Smart Todo password',
+            text: `Use this link to reset your password. It expires in 30 minutes: ${resetUrl.href}`,
+        }).catch(async (error) => {
+            console.error('[Password reset email failed]', { code: error.code, message: error.message });
+            await deletePasswordResetToken(tokenHash).catch(() => {});
+        });
+}
+
+export async function resetPassword({ token, password }) {
+    const tokenHash = hashResetToken(token);
+    if (!(await hasValidPasswordResetToken(tokenHash))) return false;
+    const passwordDigest = await passwordHash(password);
+    return consumePasswordResetToken({ tokenHash, passwordHash: passwordDigest });
 }

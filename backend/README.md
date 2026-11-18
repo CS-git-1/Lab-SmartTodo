@@ -41,6 +41,8 @@ The API uses `PORT` from `.env` (default `3000`) and `HOST` (default `127.0.0.1`
 
 Authentication endpoints are available at `POST /api/auth/register`, `POST /api/auth/login`, and `GET /api/auth/me`. Register and login set an eight-hour `HttpOnly` session cookie. Task routes and `GET /api/auth/me` use that cookie; the owner is taken from the verified token, never from a caller-supplied user ID. `POST /api/auth/logout` clears the cookie. Set `CORS_ORIGIN` to the exact frontend origin; non-safe requests with an `Origin` header from another origin are rejected. Production deployments must use HTTPS so the cookie is marked `Secure`.
 
+Password recovery uses `POST /api/auth/forgot-password` and `POST /api/auth/reset-password`. Configure `FRONTEND_URL` and SMTP settings (`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`) in the backend environment. The forgot endpoint intentionally responds with the same message whether or not the email exists. Reset links expire after 30 minutes and can be used once. Apply [`migrations/001_password_reset_tokens.sql`](migrations/001_password_reset_tokens.sql) to an existing database before enabling this feature; the table is also included in `schema.sql` for new databases.
+
 Task CRUD endpoints use `dbo.Tasks`:
 
 - `GET /tasks?page=1&limit=20` lists the signed-in user's tasks with optional `status`, `priority`, `projectId`, and title `q` filters.

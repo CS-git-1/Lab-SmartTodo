@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function TodoSearch({ keyword, onSearchChange }) {
     const [draft, setDraft] = useState(keyword);
+
+    // FIX #5: sync draft กับ keyword prop เมื่อ parent reset ค่า (เช่น ตอน logout)
+    useEffect(() => {
+        setDraft(keyword);
+    }, [keyword]);
 
     function handleSubmit(event) {
         event.preventDefault();

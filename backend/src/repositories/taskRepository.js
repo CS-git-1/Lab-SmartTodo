@@ -32,7 +32,7 @@ export async function findTasks({ userId, status, priority, projectId, q, page, 
     if (status) { where.push('Status = @status'); request.input('status', sql.VarChar(20), status); }
     if (priority) { where.push('Priority = @priority'); request.input('priority', sql.TinyInt, priority); }
     if (projectId) { where.push('ProjectId = @projectId'); request.input('projectId', sql.UniqueIdentifier, projectId); }
-    if (q) { where.push('Title LIKE @q'); request.input('q', sql.NVarChar(302), `%${q}%`); }
+    if (q) { where.push('(Title LIKE @q OR Description LIKE @q)'); request.input('q', sql.NVarChar(302), `%${q}%`); }
 
     const result = await request.query(`
         SELECT TaskId AS id, UserId AS userId, ProjectId AS projectId, Title AS title,
@@ -47,8 +47,8 @@ export async function findTasks({ userId, status, priority, projectId, q, page, 
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`);
 
     return {
-        data: result.recordset.map(({ id, title, description, status, isCompleted, priority, dueAt, createdAt, updatedAt }) => ({
-            id, title, description, status, isCompleted, priority, dueAt, createdAt, updatedAt,
+        data: result.recordset.map(({ id, title, description, status, isCompleted, priority, startAt, dueAt, estimatedMinutes, completedAt, sortOrder, createdAt, updatedAt }) => ({
+            id, title, description, status, isCompleted, priority, startAt, dueAt, estimatedMinutes, completedAt, sortOrder, createdAt, updatedAt,
         })),
         total: Number(result.recordset[0]?.totalCount ?? 0),
     };

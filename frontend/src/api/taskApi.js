@@ -60,7 +60,7 @@ function toTodo(task) {
         id: task.id,
         title: task.title,
         description: task.description ?? "",
-        priority: task.priority <= 1 ? "low" : task.priority === 2 ? "medium" : "high",
+        priority: task.priority <= 1 ? "low" : task.priority === 2 ? "medium" : task.priority === 3 ? "high" : "urgent",
         dueDate,
         completed: task.isCompleted ?? task.status === "done",
         createdAt: timestamp(task.createdAt),
@@ -73,7 +73,7 @@ function toTaskChanges(changes) {
     if (Object.hasOwn(changes, "title")) payload.title = changes.title;
     if (Object.hasOwn(changes, "description")) payload.description = changes.description;
     if (Object.hasOwn(changes, "priority")) {
-        payload.priority = { low: 1, medium: 2, high: 3 }[changes.priority];
+        payload.priority = { low: 1, medium: 2, high: 3, urgent: 4 }[changes.priority];
     }
     if (Object.hasOwn(changes, "dueDate")) {
         payload.dueAt = changes.dueDate ? `${changes.dueDate}T00:00:00.000Z` : null;

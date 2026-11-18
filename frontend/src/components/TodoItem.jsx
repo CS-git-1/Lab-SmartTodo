@@ -5,8 +5,11 @@ const dateFormatter = new Intl.DateTimeFormat("th-TH", {
     month: "short",
     year: "numeric",
 });
-const currentDate = new Date();
-const today = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}-${String(currentDate.getDate()).padStart(2, "0")}`;
+
+function getToday() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 export default function TodoItem({ todo, onToggle, onDelete, onEdit, priorityLabels, isPending = false }) {
     const [isEditing, setIsEditing] = useState(false);
@@ -19,6 +22,7 @@ export default function TodoItem({ todo, onToggle, onDelete, onEdit, priorityLab
     const dueDateLabel = todo.dueDate
         ? dateFormatter.format(new Date(`${todo.dueDate}T00:00:00`))
         : "";
+    const today = getToday();
     const isOverdue = Boolean(todo.dueDate && todo.dueDate < today && !todo.completed);
 
     async function handleSave(event) {
@@ -50,7 +54,7 @@ export default function TodoItem({ todo, onToggle, onDelete, onEdit, priorityLab
             <div className="task-info">
                 {isEditing ? (
                     <form className="edit-form" onSubmit={handleSave}>
-                        <input className="edit-input" value={editFields.title} maxLength={100} aria-label="แก้ไขชื่องาน" disabled={isPending}
+                        <input className="edit-input" value={editFields.title} maxLength={300} aria-label="แก้ไขชื่องาน" disabled={isPending}
                             onChange={(event) => setEditFields((fields) => ({ ...fields, title: event.target.value }))}
                             onKeyDown={(event) => {
                                 if (event.key === "Escape") cancelEdit();
@@ -61,7 +65,7 @@ export default function TodoItem({ todo, onToggle, onDelete, onEdit, priorityLab
                             onChange={(event) => setEditFields((fields) => ({ ...fields, description: event.target.value }))} />
                         <select className="edit-input" value={editFields.priority} aria-label="แก้ไขความสำคัญ" disabled={isPending}
                             onChange={(event) => setEditFields((fields) => ({ ...fields, priority: event.target.value }))}>
-                            <option value="low">ความสำคัญต่ำ</option><option value="medium">ความสำคัญกลาง</option><option value="high">ความสำคัญสูง</option>
+                            <option value="low">ความสำคัญต่ำ</option><option value="medium">ความสำคัญกลาง</option><option value="high">ความสำคัญสูง</option><option value="urgent">เร่งด่วน</option>
                         </select>
                         <input className="edit-input" type="date" value={editFields.dueDate} aria-label="แก้ไขวันกำหนดส่ง" disabled={isPending}
                             onChange={(event) => setEditFields((fields) => ({ ...fields, dueDate: event.target.value }))} />

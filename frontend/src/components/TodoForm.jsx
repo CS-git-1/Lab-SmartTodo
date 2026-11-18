@@ -52,7 +52,7 @@ export default function TodoForm({ onAddTodo, titleInputRef }) {
                 name="title"
                 type="text"
                 placeholder="เพิ่มงานใหม่..."
-                maxLength={100}
+                maxLength={300}
                 aria-label="ชื่องาน"
                 value={fields.title}
                 onChange={handleChange}
@@ -74,6 +74,7 @@ export default function TodoForm({ onAddTodo, titleInputRef }) {
                 <option value="low">ความสำคัญต่ำ</option>
                 <option value="medium">ความสำคัญกลาง</option>
                 <option value="high">ความสำคัญสูง</option>
+                <option value="urgent">เร่งด่วน</option>
             </select>
             <label className="due-date-field">
                 <span>กำหนดเสร็จ</span>
