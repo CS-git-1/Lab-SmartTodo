@@ -8,7 +8,7 @@
 - Backend เป็น Node.js + Express และต้องรันเป็น process/container ที่เปิดพอร์ต HTTP ได้ จึงวางแผนใช้ **Azure Container Apps** แทน Azure Web App/App Service ที่ติดข้อจำกัด quota ใน subscription.
 - Backend deploy สำเร็จบน Azure Container Apps จาก local Docker image tag `crosssite-cookie-v1`; GitHub auto-deploy สำหรับ backend ยังไม่ได้ตั้ง.
 - Frontend และ backend ต้องเชื่อมกันผ่าน HTTPS; frontend ต้อง build โดยกำหนด `VITE_API_BASE_URL` เป็น URL ของ backend.
-- Backend deploy แล้ว แต่ยังไม่มี GitHub Actions workflow สำหรับ deploy backend อัตโนมัติ.
+- Backend deploy แล้ว; ยังไม่ได้ตั้ง GitHub Actions auto-deploy สำหรับ backend.
 
 ## ทำไมเปลี่ยนจาก Web App เป็น Container Apps
 
@@ -46,10 +46,11 @@
 
 ### GitHub
 
-- `main` ล่าสุดที่ยืนยัน: commit `3a81144` (`Add authentication and password recovery`).
+- `main` ล่าสุดที่ยืนยันก่อนเอกสารอัปเดตนี้: commit `fad25e6` (`Connect frontend to Azure API`).
 - GitHub มีโฟลเดอร์ `backend/`, source, schema และ migration.
-- GitHub ยังไม่มี `backend/Dockerfile`, `.dockerignore` หรือ workflow สำหรับ deploy backend. ไฟล์เหล่านี้อยู่ใน working tree ในเครื่องเท่านั้น ณ เวลาทำเอกสาร.
+- GitHub มี `backend/Dockerfile`, `.dockerignore`, `frontend/.env.production` และ handoff นี้.
 - Workflow ปัจจุบัน `.github/workflows/azure-static-web-apps-lemon-pond-06b37d700.yml` deploy **frontend อย่างเดียว** โดย `app_location: frontend`, `output_location: dist`.
+- GitHub Actions run `44280600221` สำหรับ commit `fad25e6` จบด้วย success และ deploy frontend แล้ว.
 
 ### Azure Container Apps
 
@@ -66,7 +67,9 @@
 
 - Static Web App ผูกกับ GitHub `main`.
 - Static Web App app settings ยังว่าง; Vite ต้องรับ `VITE_API_BASE_URL` ตอน build (การตั้ง Vite env เป็น app runtime setting อย่างเดียวไม่เปลี่ยน bundle ที่ build ไปแล้ว).
-- Production build config `frontend/.env.production` ชี้ไปยัง Container App HTTPS API URL; ไฟล์นี้ต้องอยู่ใน GitHub เพื่อให้ Azure Static Web Apps build bundle ใช้ API production.
+- Production build config `frontend/.env.production` ชี้ไปยัง Container App HTTPS API URL.
+- เปิด Static Web App ได้ `200`; ตรวจ bundle ที่เสิร์ฟจาก Azure แล้วพบ API URL จริงและไม่พบ `http://localhost:3000/api`.
+- API CORS preflight จาก frontend origin ตอบ `204`; unsafe POST ที่ไม่มี Origin ถูกปฏิเสธ `403`.
 
 ### ข้อผิดพลาด/สิ่งที่ลองแล้ว
 
@@ -153,12 +156,9 @@ Backend ต้องใช้ Azure SQL `sqldb-smarttodo.database.windows.net`, 
 
 ## ขั้นตอนทำต่อ: Frontend
 
-1. เลือก API origin/custom domain/proxy หลังแก้ cross-site cookie plan.
-2. ตั้ง `VITE_API_BASE_URL=https://<api-domain>/api` **ตอน build**. สำหรับ workflow ปัจจุบัน ให้ส่ง env var เข้า Azure Static Web Apps build job; app settings หลัง build ไม่เปลี่ยน bundle.
-3. ตรวจว่า CORS `CORS_ORIGIN` เป็น origin ของ frontend แบบ exact (protocol + host, ไม่มี path/trailing slash).
-4. Push workflow/config change ไป `main`; รอ Azure Static Web Apps GitHub Actions deployment successful.
-5. เปิด frontend URL, DevTools Network/Application: ตรวจ request HTTPS ไป `/api/auth/login`, response `Set-Cookie`, cookie ถูกเก็บและส่งใน `GET /api/auth/me`.
-6. ทดสอบ login, refresh, list/create/update/delete task; ยืนยัน database ownership behavior.
+1. Frontend ชี้ API ผ่าน `frontend/.env.production`; build/push แล้วและ Azure Static Web Apps workflow สำเร็จ.
+2. ตรวจ browser cookie จริงใน DevTools: login ต้องได้รับ `Set-Cookie` แบบ `SameSite=None; Secure`, browser ต้องบันทึกและส่ง cookie ใน `GET /api/auth/me`. Third-party cookie settings ของ browser อาจบล็อก cookie.
+3. ทดสอบ login, refresh, list/create/update/delete task; ยืนยัน database ownership behavior.
 
 ## Checklist รับงาน
 
@@ -167,10 +167,11 @@ Backend ต้องใช้ Azure SQL `sqldb-smarttodo.database.windows.net`, 
 - [x] `/health` ตอบ `200` และ `{"success":true}`.
 - [x] Log แสดง Smart Todo API start และเรียก `/health` ได้.
 - [x] Login test ด้วยข้อมูลสมมติตอบ `401`, ยืนยันว่า API เชื่อมฐานข้อมูลได้.
-- [ ] Frontend build bundle จาก GitHub ใช้ `https://<api-domain>/api`, ไม่ใช่ localhost.
-- [ ] Browser CORS ผ่าน และ cookie auth ทำงานข้าม origin/site ตาม architecture ที่เลือก.
+- [x] Frontend build bundle ที่ deploy จาก GitHub ใช้ API HTTPS URL ไม่ใช่ localhost.
+- [x] CORS preflight ผ่าน และ API ปฏิเสธ unsafe request ที่ไม่มี Origin.
+- [ ] Browser เก็บและส่ง session cookie ข้าม site ได้.
 - [ ] Login + refresh + `/api/auth/me` + task CRUD ผ่าน.
-- [ ] GitHub Actions frontend/backend deployment สำเร็จ และไฟล์ secrets ไม่อยู่ใน repo.
+- [x] GitHub Actions deploy frontend สำเร็จ; backend auto-deploy workflow ยังไม่ได้ตั้ง.
 
 ## คำสั่งตรวจเร็ว
 
