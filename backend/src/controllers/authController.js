@@ -2,7 +2,14 @@ import { getTokenLifetimeSeconds, loginUser, registerUser, requestPasswordReset,
 import { logServerError, sendApiError } from '../utils/apiError.js';
 
 const authCookieName = 'smart-todo.session';
-const authCookieOptions = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/', maxAge: getTokenLifetimeSeconds() * 1000 };
+const isProduction = process.env.NODE_ENV === 'production';
+const authCookieBaseOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'strict',
+    path: '/',
+};
+const authCookieOptions = { ...authCookieBaseOptions, maxAge: getTokenLifetimeSeconds() * 1000 };
 function sendAuthenticated(res, status, result) {
     res.cookie(authCookieName, result.token, authCookieOptions);
     return res.status(status).json({ success: true, data: { user: result.user } });
@@ -45,7 +52,7 @@ export async function me(req, res) {
 }
 
 export async function logout(_req, res) {
-    res.clearCookie(authCookieName, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
+    res.clearCookie(authCookieName, authCookieBaseOptions);
     return res.status(204).end();
 }
 

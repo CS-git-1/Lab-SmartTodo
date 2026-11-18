@@ -15,7 +15,12 @@ if (process.env.NODE_ENV === 'production' && !configuredOrigin) {
 const allowedOrigin = configuredOrigin || 'http://localhost:5173';
 app.use(cors({ origin: allowedOrigin, credentials: true }));
 app.use((req, res, next) => {
-  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get('Origin') && req.get('Origin') !== allowedOrigin) {
+  const isUnsafeMethod = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+  const requestOrigin = req.get('Origin');
+  const originIsInvalid = process.env.NODE_ENV === 'production'
+    ? requestOrigin !== allowedOrigin
+    : Boolean(requestOrigin && requestOrigin !== allowedOrigin);
+  if (isUnsafeMethod && originIsInvalid) {
     return sendApiError(res, 403, 'ORIGIN_NOT_ALLOWED', 'คำขอมาจากแหล่งที่ไม่อนุญาต');
   }
   next();
