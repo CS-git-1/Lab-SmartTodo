@@ -6,7 +6,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 const authCookieBaseOptions = {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'none' : 'strict',
+    sameSite: isProduction ? 'lax' : 'strict',
     path: '/',
 };
 const authCookieOptions = { ...authCookieBaseOptions, maxAge: getTokenLifetimeSeconds() * 1000 };

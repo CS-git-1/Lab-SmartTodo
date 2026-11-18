@@ -20,6 +20,7 @@ function isValidDateString(value) {
 
 export default function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isCheckingSession, setIsCheckingSession] = useState(true);
     const [user, setUser] = useState(null);
     const [todos, setTodos] = useState([]);
     const [pendingTaskIds, setPendingTaskIds] = useState(() => new Set());
@@ -36,6 +37,27 @@ export default function App() {
     const [isError, setIsError] = useState(false);
     const [messageType, setMessageType] = useState("");
     const titleInputRef = useRef(null);
+
+    useEffect(() => {
+        let isActive = true;
+
+        getCurrentUser()
+            .then((currentUser) => {
+                if (!isActive) return;
+                setUser(currentUser);
+                setIsAuthenticated(true);
+            })
+            .catch(() => {
+                if (isActive) setIsAuthenticated(false);
+            })
+            .finally(() => {
+                if (isActive) setIsCheckingSession(false);
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, []);
 
     useEffect(() => {
         if (!isAuthenticated) return undefined;
@@ -243,6 +265,7 @@ export default function App() {
         completed: todos.filter((todo) => todo.completed).length,
     };
 
+    if (isCheckingSession) return <main className="app"><p role="status">กำลังตรวจสอบการเข้าสู่ระบบ...</p></main>;
     if (!isAuthenticated) return <AuthForm onAuthenticated={acceptAuthentication} />;
     if (isLoading && !user) return <main className="app"><p role="status">กำลังเชื่อมต่อ...</p></main>;
 

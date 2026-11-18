@@ -1,14 +1,16 @@
-# คู่มือทำต่อ: Deploy Smart Todo บน Azure
+﻿# คู่มือทำต่อ: Deploy Smart Todo บน Azure
+
+> Historical details below include the retired Static Web Apps deployment. Current production status is recorded in the final "Current status" section; users should open the Container App URL listed there.
 
 เอกสารนี้บันทึกสถาปัตยกรรม เหตุผลที่เปลี่ยนวิธี host สถานะปัจจุบัน และขั้นตอนที่ต้องทำต่อสำหรับทั้ง frontend และ backend เพื่อกลับมาทำงานภายหลังได้โดยไม่ต้องไล่บทสนทนาเดิม
 
 ## สรุปสั้น
 
-- Frontend เป็น React + Vite และ deploy อยู่บน **Azure Static Web Apps** จาก GitHub repository `CS-git-1/Lab-SmartTodo` branch `main`.
-- Backend เป็น Node.js + Express และต้องรันเป็น process/container ที่เปิดพอร์ต HTTP ได้ จึงวางแผนใช้ **Azure Container Apps** แทน Azure Web App/App Service ที่ติดข้อจำกัด quota ใน subscription.
-- Backend deploy สำเร็จบน Azure Container Apps จาก local Docker image tag `crosssite-cookie-v1`; GitHub auto-deploy สำหรับ backend ยังไม่ได้ตั้ง.
-- Frontend และ backend ต้องเชื่อมกันผ่าน HTTPS; frontend ต้อง build โดยกำหนด `VITE_API_BASE_URL` เป็น URL ของ backend.
-- Backend deploy แล้ว; ยังไม่ได้ตั้ง GitHub Actions auto-deploy สำหรับ backend.
+- Frontend เป็น React + Vite และรวม build ไว้ใน image เดียวกับ backend บน **Azure Container Apps**.
+- Backend เป็น Node.js + Express บน **Azure Container Apps** แทน Azure Web App/App Service ซึ่งติดข้อจำกัด quota ใน subscription.
+- ใช้โดเมน Container App เดียวกันสำหรับเว็บและ API เพื่อให้ session cookie เป็น same-origin และไม่ขึ้นกับ third-party cookie policy.
+- URL ปัจจุบันสำหรับผู้ใช้: `https://app-todo-api-01.orangeplant-6ae0cf94.southeastasia.azurecontainerapps.io`.
+- Backend ยัง deploy ด้วย local Docker build/push และ `az containerapp update`; GitHub Actions auto-deploy backend ยังไม่ได้ตั้ง.
 
 ## ทำไมเปลี่ยนจาก Web App เป็น Container Apps
 
@@ -16,11 +18,11 @@
 
 การเปลี่ยนนี้หมายถึง:
 
-1. สร้าง container image ของ backend จาก `backend/`.
+1. สร้าง container image จาก root ของ repository; Dockerfile build frontend และ backend รวมกัน.
 2. push image เข้า Azure Container Registry (ACR).
 3. ให้ Azure Container Apps รัน image และเปิด HTTPS ingress.
 4. ตั้งค่า database, auth secret, CORS และพอร์ตใน Container App.
-5. rebuild/deploy frontend โดยชี้ API ไปยัง Container App.
+5. เปิด Container App domain; frontend เรียก API ด้วย relative path `/api`.
 
 `az containerapp up --source ...` สร้าง image ฝั่ง Azure และส่ง build ไป ACR Tasks; ไม่ได้เรียก Docker Desktop engine ในเครื่อง. Subscription ปฏิเสธ ACR Tasks (`TasksOperationsNotAllowed`) จึงใช้ local Docker build + push เข้า ACR แล้ว deploy image ด้วย `az containerapp update` แทน.
 
@@ -35,8 +37,8 @@
 | Container Apps environment | `managedEnvironment-rgcampazure01-950e` |
 | Backend Container App | `app-todo-api-01` |
 | Backend default domain | `https://app-todo-api-01.orangeplant-6ae0cf94.southeastasia.azurecontainerapps.io` |
-| Frontend Static Web App | `camp-azure-webapp-todo` |
-| Frontend domain | `https://lemon-pond-06b37d700.4.azurestaticapps.net` |
+| Legacy Frontend Static Web App (not current production) | `camp-azure-webapp-todo` |
+| Legacy Static Web App domain (not current production) | `https://lemon-pond-06b37d700.4.azurestaticapps.net` |
 | GitHub repository/branch | `https://github.com/CS-git-1/Lab-SmartTodo`, `main` |
 | ACR | `caaff190caa2acr.azurecr.io` |
 
@@ -49,27 +51,27 @@
 - `main` ล่าสุดที่ยืนยันก่อนเอกสารอัปเดตนี้: commit `fad25e6` (`Connect frontend to Azure API`).
 - GitHub มีโฟลเดอร์ `backend/`, source, schema และ migration.
 - GitHub มี `backend/Dockerfile`, `.dockerignore`, `frontend/.env.production` และ handoff นี้.
-- Workflow ปัจจุบัน `.github/workflows/azure-static-web-apps-lemon-pond-06b37d700.yml` deploy **frontend อย่างเดียว** โดย `app_location: frontend`, `output_location: dist`.
+- Legacy workflow `.github/workflows/azure-static-web-apps-lemon-pond-06b37d700.yml` still deploys the retired Static Web App; it does not deploy the current Container App frontend.
 - GitHub Actions run `44280600221` สำหรับ commit `fad25e6` จบด้วย success และ deploy frontend แล้ว.
 
 ### Azure Container Apps
 
 - Container App `app-todo-api-01` มี ingress เป็น external.
-- Deploy image `caaff190caa2acr.azurecr.io/smart-todo-api:crosssite-cookie-v1` สำเร็จ; revision ล่าสุด `app-todo-api-01--0000002` มีสถานะ Ready และ target port `3000`.
-- Production cookie ใช้ `SameSite=None; Secure`; unsafe requests ต้องมี `Origin` ตรงกับ frontend origin ที่อนุญาต.
+- Revision ปัจจุบัน `app-todo-api-01--0000007` ใช้ image `caaff190caa2acr.azurecr.io/smart-todo-api:session-refresh-v1`; target port `3000`.
+- Production cookie ใช้ `SameSite=Lax; Secure`; `CORS_ORIGIN` ตั้งเป็น Container App origin และ unsafe requests ต้องมี Origin ตรงกับ origin เดียวกัน.
 - `GET https://app-todo-api-01.orangeplant-6ae0cf94.southeastasia.azurecontainerapps.io/health` ตอบ `200 {"success":true}`.
 - Logs ยืนยัน `Smart Todo API listening on http://0.0.0.0:3000`.
-- CORS preflight จาก frontend origin ตอบ `204` พร้อม allow-origin และ credentials.
+- Earlier CORS preflight checks were for the retired Static Web App; production now uses same-origin requests.
 - Login request ด้วยบัญชีสมมติที่ไม่มีอยู่ตอบ `401`; API เชื่อม Azure SQL ได้.
 - ACR pull credential, DB password และ auth signing secret ถูกตั้งเป็น Azure Container App secrets. อย่าดึงหรือพิมพ์ค่า secret.
 
 ### Frontend
 
-- Static Web App ผูกกับ GitHub `main`.
-- Static Web App app settings ยังว่าง; Vite ต้องรับ `VITE_API_BASE_URL` ตอน build (การตั้ง Vite env เป็น app runtime setting อย่างเดียวไม่เปลี่ยน bundle ที่ build ไปแล้ว).
-- Production build config `frontend/.env.production` ชี้ไปยัง Container App HTTPS API URL.
-- เปิด Static Web App ได้ `200`; ตรวจ bundle ที่เสิร์ฟจาก Azure แล้วพบ API URL จริงและไม่พบ `http://localhost:3000/api`.
-- API CORS preflight จาก frontend origin ตอบ `204`; unsafe POST ที่ไม่มี Origin ถูกปฏิเสธ `403`.
+- The retired Static Web App remains linked to GitHub `main`; do not use its URL for production login.
+- Vite settings are build-time values; the active Container App image builds with `VITE_API_BASE_URL=/api`.
+- Production build config `frontend/.env.production` ใช้ `VITE_API_BASE_URL=/api`.
+- Previous Static Web App checks are historical; current production checks target the Container App URL above.
+- Earlier CORS preflight checks were for the retired Static Web App; production now uses same-origin requests.
 
 ### ข้อผิดพลาด/สิ่งที่ลองแล้ว
 
@@ -84,14 +86,7 @@
 
 ### 1. Cookie ข้ามโดเมน
 
-Frontend ใช้ `https://...azurestaticapps.net`; API ใช้ `https://...azurecontainerapps.io` ซึ่งเป็นคนละ site. Backend revision `crosssite-cookie-v1` ตั้ง production session cookie เป็น `SameSite=None; Secure` และตรวจ `Origin` ของ unsafe requests ให้ตรงกับ frontend origin. Browser อาจยังบล็อก third-party cookies ตามการตั้งค่าความเป็นส่วนตัว จึงต้องตรวจ login จริงใน browser.
-
-ทางเลือกที่ควรเลือกก่อนเปิดใช้งานจริง:
-
-- **แนะนำ:** ใช้ custom domain ภายใต้โดเมนเดียวกัน เช่น `todo.example.com` กับ `api.example.com` แล้วออกแบบ cookie/domain ให้เหมาะสม; หรือ proxy `/api` ผ่าน frontend host.
-- อีกทางคือ cross-site cookie `SameSite=None; Secure` และเพิ่ม/ตรวจ CSRF protection อย่างชัดเจน พร้อมทดสอบ browser policy เรื่อง third-party cookies. CORS กับ `Origin` check ที่มีอยู่เป็นชั้นป้องกัน แต่ต้องทบทวน flow และทดสอบจริงก่อนใช้.
-
-อย่าเพิ่งถือว่า login ผ่านเพียงเพราะ API ตอบ HTTP. ต้องตรวจว่า browser เก็บ cookie แล้วส่งกลับใน request ต่อไป.
+แก้แล้วโดยรวม frontend กับ API ใน Container App เดียวกัน: browser เปิดและเรียก `/api` ภายใต้ origin เดียวกัน, cookie ใช้ `SameSite=Lax; Secure`, และ backend ตรวจ Origin ให้ตรงกับ Container App URL. ผู้ใช้ยืนยันแล้วว่า login และกด F5 แล้วยังอยู่ในหน้า task.
 
 ### 2. Database schema
 
@@ -108,7 +103,7 @@ Backend ต้องใช้ Azure SQL `sqldb-smarttodo.database.windows.net`, 
 - `NODE_ENV=production`
 - `HOST=0.0.0.0`
 - `PORT=3000`
-- `CORS_ORIGIN=https://lemon-pond-06b37d700.4.azurestaticapps.net` (ต้องตรงกับ frontend origin จริง)
+- `CORS_ORIGIN=https://app-todo-api-01.orangeplant-6ae0cf94.southeastasia.azurecontainerapps.io` (origin ของเว็บและ API ปัจจุบัน)
 - `DB_SERVER`, `DB_PORT=1433`, `DB_NAME`, `DB_USER`
 - `DB_PASSWORD` เป็น Container App secret reference
 - `DB_ENCRYPT=true`, `DB_TRUST_SERVER_CERTIFICATE=false`
@@ -156,22 +151,22 @@ Backend ต้องใช้ Azure SQL `sqldb-smarttodo.database.windows.net`, 
 
 ## ขั้นตอนทำต่อ: Frontend
 
-1. Frontend ชี้ API ผ่าน `frontend/.env.production`; build/push แล้วและ Azure Static Web Apps workflow สำเร็จ.
-2. ตรวจ browser cookie จริงใน DevTools: login ต้องได้รับ `Set-Cookie` แบบ `SameSite=None; Secure`, browser ต้องบันทึกและส่ง cookie ใน `GET /api/auth/me`. Third-party cookie settings ของ browser อาจบล็อก cookie.
-3. ทดสอบ login, refresh, list/create/update/delete task; ยืนยัน database ownership behavior.
+1. แก้ frontend ใน `frontend/src/`; `frontend/.env.production` กำหนด API เป็น `/api`.
+2. Build จาก repository root ด้วย Dockerfile ที่ build frontend แล้วรวมไฟล์ `dist` ใน backend image; push image ไป ACR แล้ว deploy ด้วย `az containerapp update`.
+3. เปิด Container App URL เดียวกัน, login และ refresh; ผู้ใช้ยืนยันแล้วว่า refresh ไม่หลุดไปหน้า login. ควรตรวจ task CRUD เพิ่มเมื่อมีการเปลี่ยนแปลง API.
 
 ## Checklist รับงาน
 
 - [x] Backend image ใน Container App เป็น image Smart Todo ไม่ใช่ quickstart.
-- [x] Container App revision `app-todo-api-01--0000002` Ready; target port ตรง `3000`.
+- [x] Container App revision `app-todo-api-01--0000007` Ready; target port ตรง `3000`.
 - [x] `/health` ตอบ `200` และ `{"success":true}`.
 - [x] Log แสดง Smart Todo API start และเรียก `/health` ได้.
 - [x] Login test ด้วยข้อมูลสมมติตอบ `401`, ยืนยันว่า API เชื่อมฐานข้อมูลได้.
-- [x] Frontend build bundle ที่ deploy จาก GitHub ใช้ API HTTPS URL ไม่ใช่ localhost.
+- [x] Frontend build bundle ใช้ same-origin API path `/api` ไม่ใช่ localhost หรือ cross-site URL.
 - [x] CORS preflight ผ่าน และ API ปฏิเสธ unsafe request ที่ไม่มี Origin.
-- [ ] Browser เก็บและส่ง session cookie ข้าม site ได้.
-- [ ] Login + refresh + `/api/auth/me` + task CRUD ผ่าน.
-- [x] GitHub Actions deploy frontend สำเร็จ; backend auto-deploy workflow ยังไม่ได้ตั้ง.
+- [x] Login และ refresh แล้วยังคงอยู่ในหน้า task (ผู้ใช้ยืนยัน).
+- [ ] ทดสอบ task CRUD หลัง deploy image ที่รวม frontend ล่าสุด.
+- [x] Container App เสิร์ฟ frontend และ backend จาก origin เดียวกัน; backend auto-deploy workflow ยังไม่ได้ตั้ง.
 
 ## คำสั่งตรวจเร็ว
 
@@ -183,3 +178,11 @@ az containerapp logs show -n app-todo-api-01 -g rg-camp-azure-01 --type console 
 ```
 
 อย่าพิมพ์หรือแนบ `.env`, DB password, cookies, JWT/session tokens หรือ Azure credentials ใน issue/แชต/log ที่แชร์ได้.
+# สถานะปัจจุบัน (อัปเดต 2026-11-18)
+
+- URL ที่ให้ผู้ใช้เปิด: `https://app-todo-api-01.orangeplant-6ae0cf94.southeastasia.azurecontainerapps.io`
+- Container App revision `app-todo-api-01--0000007` รัน image `caaff190caa2acr.azurecr.io/smart-todo-api:session-refresh-v1` และเสิร์ฟทั้ง frontend กับ API.
+- Frontend เรียก API ด้วย relative path `/api`; session cookie เป็น `SameSite=Lax; Secure` จึงอยู่ same-origin และไม่พึ่ง third-party cookies.
+- การ build ต้องใช้ repository root เป็น Docker context: `docker build --platform linux/amd64 -t <acr>/smart-todo-api:<tag> -f backend/Dockerfile .`
+- Vite settings are build-time values; the active Container App image builds with `VITE_API_BASE_URL=/api`.
+- Login และ F5 ผ่านตามที่ผู้ใช้ยืนยัน; ตรวจเมื่อ deploy: `/` ต้องตอบ `text/html`, `/health` และ `/api/health` ตอบ `200`.

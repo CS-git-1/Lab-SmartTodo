@@ -6,6 +6,8 @@ Repository: [CS-git-1/smart-todo-curd](https://github.com/CS-git-1/smart-todo-cu
 
 ตั้งค่า `VITE_API_BASE_URL` ใน `.env.local` (ค่าเริ่มต้น `http://localhost:3000/api`) ก่อนเริ่ม frontend ด้วย `npm run dev` Backend รองรับการเข้าสู่ระบบด้วย HttpOnly cookie; ตั้งค่า `CORS_ORIGIN` ฝั่ง backend ให้ตรงกับ origin ของ frontend
 
+Production ปัจจุบันเสิร์ฟทั้ง frontend และ API จาก Azure Container App origin เดียวกัน: <https://app-todo-api-01.orangeplant-6ae0cf94.southeastasia.azurecontainerapps.io> โดย frontend ใช้ `VITE_API_BASE_URL=/api`. ตอนเปิดหน้าเว็บ แอปตรวจ session ด้วย `/api/auth/me` ก่อนแสดงหน้า login เพื่อให้ refresh แล้วยังอยู่ในระบบเมื่อ cookie ยังใช้ได้. ดูรายละเอียดและขั้นตอน deploy ใน [Azure Deployment Handoff](../AZURE-DEPLOYMENT-HANDOFF.md).
+
 ## เริ่มใช้งาน
 
 ```bash

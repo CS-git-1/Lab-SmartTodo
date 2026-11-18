@@ -35,11 +35,11 @@ Start in regular mode:
 npm start
 ```
 
-The API uses `PORT` from `.env` (default `3000`) and `HOST` (default `127.0.0.1`). Visit `http://localhost:3000/` for the Hello World response, `http://localhost:3000/api/health` for the health check. In deployment, keep the API bound to localhost and expose it through the reverse proxy.
+The API uses `PORT` from `.env` (default `3000`) and `HOST` (default `127.0.0.1`). Visit `http://localhost:3000/api/health` for the health check. The Azure deployment serves the built frontend and API from the same Container App origin; `/` serves the frontend and `/api/health` checks the API.
 
 ## Task API
 
-Authentication endpoints are available at `POST /api/auth/register`, `POST /api/auth/login`, and `GET /api/auth/me`. Register and login set an eight-hour `HttpOnly` session cookie. Task routes and `GET /api/auth/me` use that cookie; the owner is taken from the verified token, never from a caller-supplied user ID. `POST /api/auth/logout` clears the cookie. Set `CORS_ORIGIN` to the exact frontend origin; non-safe requests with an `Origin` header from another origin are rejected. Production deployments must use HTTPS so the cookie is marked `Secure`.
+Authentication endpoints are available at `POST /api/auth/register`, `POST /api/auth/login`, and `GET /api/auth/me`. Register and login set an eight-hour `HttpOnly` session cookie. Task routes and `GET /api/auth/me` use that cookie; the owner is taken from the verified token, never from a caller-supplied user ID. `POST /api/auth/logout` clears the cookie. Set `CORS_ORIGIN` to the exact frontend origin; non-safe requests with an `Origin` header from another origin are rejected. Production deployments must use HTTPS so the cookie is marked `Secure`. The current Azure deployment serves frontend and API from one origin; the frontend checks `GET /api/auth/me` on page load to restore an existing session after refresh.
 
 Password recovery uses `POST /api/auth/forgot-password` and `POST /api/auth/reset-password`. Configure `FRONTEND_URL` and SMTP settings (`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`) in the backend environment. The forgot endpoint intentionally responds with the same message whether or not the email exists. Reset links expire after 30 minutes and can be used once. Apply [`migrations/001_password_reset_tokens.sql`](migrations/001_password_reset_tokens.sql) to an existing database before enabling this feature; the table is also included in `schema.sql` for new databases.
 

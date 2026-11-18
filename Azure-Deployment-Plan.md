@@ -1,5 +1,7 @@
 ﻿# Azure Deployment Analysis Plan — Smart Todo
 
+> **Document status:** The VM/Nginx setup below is a draft, not the live deployment. Production currently runs frontend and backend together on Azure Container Apps; see [AZURE-DEPLOYMENT-HANDOFF.md](./AZURE-DEPLOYMENT-HANDOFF.md) for the active URL, revision, and deploy steps.
+
 ## เป้าหมาย
 
 แยกแอปเป็น 3 ส่วนที่ดูแลและตั้งค่าแยกกันได้:
